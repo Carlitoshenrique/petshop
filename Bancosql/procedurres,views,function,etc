@@ -1,0 +1,421 @@
+USE Petshop;
+
+CREATE VIEW vw_atendimentos_completo AS
+SELECT
+    a.id_atendimento,
+    a.data_hora,
+    a.status_atendimento,
+
+    c.nome AS cliente,
+    c.cpf,
+
+    an.nome_animal,
+    an.especie,
+
+	f.nome_funcionario,
+    f.cpf as cpf_funcionario,
+    f.cargo,
+    
+    s.nome_servico,
+    s.preco
+
+FROM Atendimento a
+JOIN Animal an ON a.id_animal = an.id_animal
+JOIN Cliente c ON an.id_cliente = c.id_cliente
+JOIN Servico s ON a.id_servico = s.id_servico
+JOIN Funcionario f ON a.id_funcionario = f.id_funcionario;
+
+
+
+CREATE VIEW vw_clientes_animais AS
+SELECT
+    c.id_cliente,
+    c.nome,
+    c.cpf,
+    c.telefone,
+
+    an.id_animal,
+    an.nome_animal,
+    an.especie,
+    an.raca,
+    an.idade
+
+FROM Cliente c
+JOIN Animal an ON c.id_cliente = an.id_cliente;
+
+
+CREATE VIEW vw_pagamento AS
+SELECT
+    p.id_pagamento,
+    p.valor,
+    p.forma_pagamento,
+    p.status_pagamento,
+
+    a.id_atendimento,
+    a.data_hora,
+    a.status_atendimento,
+    
+    c.nome AS cliente,
+    an.nome_animal,
+    f.nome_funcionario,
+    s.nome_servico
+
+
+FROM Pagamento p
+JOIN Atendimento a ON p.id_atendimento = a.id_atendimento
+JOIN Animal an
+    ON a.id_animal = an.id_animal
+
+JOIN Cliente c
+    ON an.id_cliente = c.id_cliente
+
+JOIN Funcionario f
+    ON a.id_funcionario = f.id_funcionario
+
+JOIN Servico s
+    ON a.id_servico = s.id_servico;
+
+
+CREATE VIEW vw_relatorio_atendimento AS
+SELECT
+
+    a.id_atendimento,
+    a.data_hora,
+    a.status_atendimento,
+
+    c.nome AS cliente,
+    c.cpf AS cpf_cliente,
+
+    an.nome_animal,
+    an.especie,
+    an.raca,
+
+    f.nome_funcionario,
+    f.cpf as cpf_funcionario,
+    f.cargo,
+
+    s.nome_servico,
+    s.preco AS valor_servico,
+
+    p.forma_pagamento,
+    p.status_pagamento,
+    p.valor AS valor_pago
+
+FROM Atendimento a
+
+JOIN Animal an
+    ON an.id_animal = a.id_animal
+
+JOIN Cliente c
+    ON c.id_cliente = an.id_cliente
+
+JOIN Funcionario f
+    ON f.id_funcionario = a.id_funcionario
+
+JOIN Servico s
+    ON s.id_servico = a.id_servico
+
+LEFT JOIN Pagamento p
+    ON p.id_atendimento = a.id_atendimento;
+
+
+
+DELIMITER $$
+
+CREATE FUNCTION fn_calcular_pagamento(
+    p_valor DECIMAL(10,2),
+    p_forma VARCHAR(20)
+)
+RETURNS DECIMAL(10,2)
+DETERMINISTIC
+BEGIN
+
+    DECLARE v_valor_final DECIMAL(10,2);
+
+    SET v_valor_final = p_valor;
+
+    IF p_forma = 'Pix' THEN
+        SET v_valor_final = p_valor * 0.90;
+
+    ELSEIF p_forma = 'Dinheiro' THEN
+        SET v_valor_final = p_valor * 0.95;
+
+    ELSEIF p_forma = 'Cartao' THEN
+        SET v_valor_final = p_valor;
+
+    END IF;
+
+    RETURN v_valor_final;
+
+END $$
+
+DELIMITER ;
+
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_agendar_atendimento(
+    IN p_animal INT,
+    IN p_servico INT,
+    IN p_funcionario INT,
+    IN p_data DATETIME
+)
+BEGIN
+
+    DECLARE v_qtd INT;
+
+   
+    IF p_data <= NOW() THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'O atendimento deve ser agendado para uma data futura';
+    END IF;
+
+    
+    SELECT COUNT(*)
+    INTO v_qtd
+    FROM Atendimento
+    WHERE id_funcionario = p_funcionario
+      AND data_hora = p_data
+      AND status_atendimento <> 'Cancelado';
+
+    IF v_qtd > 0 THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Funcionário já possui atendimento neste horário';
+    END IF;
+
+    
+    INSERT INTO Atendimento (
+        data_hora,
+        status_atendimento,
+        id_animal,
+        id_servico,
+        id_funcionario
+    )
+    VALUES (
+        p_data,
+        'Agendado',
+        p_animal,
+        p_servico,
+        p_funcionario
+    );
+
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_finalizar_atendimento(
+    IN p_id_atendimento INT
+)
+BEGIN
+
+    DECLARE v_status VARCHAR(20);
+
+    SELECT status_atendimento
+    INTO v_status
+    FROM Atendimento
+    WHERE id_atendimento = p_id_atendimento;
+
+    IF v_status IS NULL THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Atendimento não encontrado';
+
+    ELSEIF v_status = 'Cancelado' THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Não é possível finalizar um atendimento cancelado';
+
+    ELSEIF v_status = 'Realizado' THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Atendimento já foi finalizado';
+
+    ELSE
+
+        UPDATE Atendimento
+        SET status_atendimento = 'Realizado'
+        WHERE id_atendimento = p_id_atendimento;
+
+    END IF;
+
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_cancelar_atendimento(
+    IN p_id_atendimento INT
+)
+BEGIN
+
+    DECLARE v_status VARCHAR(20);
+
+    SELECT status_atendimento
+    INTO v_status
+    FROM Atendimento
+    WHERE id_atendimento = p_id_atendimento;
+
+    IF v_status IS NULL THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Atendimento não encontrado';
+
+    ELSEIF v_status = 'Realizado' THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Não é possível cancelar um atendimento realizado';
+
+    ELSEIF v_status = 'Cancelado' THEN
+
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Atendimento já está cancelado';
+
+    ELSE
+
+        UPDATE Atendimento
+        SET status_atendimento = 'Cancelado'
+        WHERE id_atendimento = p_id_atendimento;
+
+    END IF;
+
+END $$
+
+DELIMITER ;
+
+
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_buscar_cliente_cpf(
+    IN p_cpf VARCHAR(14)
+)
+BEGIN
+
+    SELECT 
+        id_cliente,
+        nome,
+        cpf,
+        telefone
+    FROM Cliente
+    WHERE cpf = p_cpf;
+
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE PROCEDURE sp_buscar_funcionario_cpf(
+    IN p_cpf VARCHAR(14)
+)
+BEGIN
+
+    SELECT 
+        id_funcionario,
+        nome_funcionario,
+        cpf,
+        cargo
+    FROM Funcionario
+    WHERE cpf = p_cpf;
+
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+CREATE PROCEDURE sp_finalizar_pagamento(
+    IN p_id_atendimento INT,
+    IN p_forma VARCHAR(20)
+)
+BEGIN
+
+    DECLARE v_valor DECIMAL(10,2);
+    DECLARE v_id_pagamento INT;
+    DECLARE v_status VARCHAR(20);
+
+   
+    IF p_forma NOT IN ('Pix', 'Cartao', 'Dinheiro') THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Forma de pagamento inválida';
+    END IF;
+
+    SELECT id_pagamento, valor, status_pagamento
+    INTO v_id_pagamento, v_valor, v_status
+    FROM Pagamento
+    WHERE id_atendimento = p_id_atendimento;
+
+    IF v_id_pagamento IS NULL THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Pagamento não encontrado';
+    END IF;
+
+    IF v_status = 'Pago' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Pagamento já realizado';
+    END IF;
+
+    IF v_status = 'Cancelado' THEN
+        SIGNAL SQLSTATE '45000'
+        SET MESSAGE_TEXT = 'Não é possível realizar pagamento de um atendimento cancelado';
+    END IF;
+    
+    SET v_valor = fn_calcular_pagamento(v_valor, p_forma);
+
+   
+    UPDATE Pagamento
+    SET forma_pagamento = p_forma,
+        valor = v_valor,
+        status_pagamento = 'Pago'
+    WHERE id_pagamento = v_id_pagamento;
+
+END $$
+
+DELIMITER ;
+
+
+DELIMITER $$
+
+CREATE TRIGGER trg_criar_pagamento
+AFTER UPDATE ON Atendimento
+FOR EACH ROW
+BEGIN
+
+    DECLARE v_valor DECIMAL(10,2);
+
+   
+    IF NEW.status_atendimento = 'Realizado'
+       AND OLD.status_atendimento <> 'Realizado' THEN
+
+    
+        SELECT s.preco
+        INTO v_valor
+        FROM Servico s
+        WHERE s.id_servico = NEW.id_servico;
+
+    
+        INSERT INTO Pagamento(
+            valor,
+            forma_pagamento,
+            status_pagamento,
+            id_atendimento
+        )
+        VALUES(
+            v_valor,
+             'Dinheiro',
+            'Pendente',
+            NEW.id_atendimento
+        );
+
+    END IF;
+
+END $$
+
+DELIMITER ;

@@ -1,0 +1,43 @@
+INSERT INTO Cliente (nome, cpf, telefone)
+VALUES
+('Larissa Martins', '000.000.000-00', '81 90000 9999'),
+('Carlos Carvalho', '111.111.111-11', '87 99999 9999'),
+('Maria Souza', '222.222.222-33', '81 98888 7777'),
+('João Pedro', '333.333.333-33', '81 97777 6666'),
+('Fernanda Lima', '444.444.444-44', '81 96666 5555');
+
+INSERT INTO Funcionario (nome_funcionario, cpf, cargo)
+VALUES
+('Ana Clara', '999.999.999-99', 'Tosadora'),
+('Bruno Lima', '888.888.888-88', 'Veterinario'),
+('Teo Mendes', '777.777.777-77', 'Banho'),
+('Carla Souza', '666.666.666-66', 'Recepcionista'),
+('Lucas Oliveira', '555.555.555-55', 'Tosador');
+
+INSERT INTO Servico (nome_servico, preco)
+VALUES
+('Banho', 40.00),
+('Tosa', 50.00),
+('Vacina', 60.00);
+
+
+INSERT INTO Animal (nome_animal, especie, raca, idade, id_cliente)
+VALUES
+('Rex', 'Cachorro', 'Labrador', 3, 1),
+('Mel', 'Gato', 'Siamês', 2, 3),
+('Thor', 'Cachorro', 'Pitbull', 4, 2),
+('Luna', 'Gato', 'Persa', 1, 4),
+('Max', 'Cachorro', 'Beagle', 5, 5);
+
+INSERT INTO Atendimento (data_hora, status_atendimento, id_animal, id_servico, id_funcionario)
+VALUES
+('2026-06-15 09:00:00', 'Agendado', 1, 1, 1),
+('2026-06-15 10:00:00', 'Agendado', 2, 3, 2),
+('2026-06-15 11:00:00', 'Agendado', 3, 2, 3);
+
+INSERT INTO Pagamento (valor, forma_pagamento, status_pagamento, id_atendimento)
+VALUES
+(40.00, 'Pix', 'Pendente', 1),
+(80.00, 'Cartao', 'Pendente', 2);
+
+
